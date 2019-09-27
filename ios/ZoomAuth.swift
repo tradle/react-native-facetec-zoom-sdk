@@ -248,7 +248,7 @@ class ZoomAuth:  RCTViewManager, ZoomVerificationDelegate {
       let publicKey = options["facemapEncryptionKey"] as! String
       Zoom.sdk.setFacemapEncryptionKey(publicKey: publicKey)
     }
-
+    
     Zoom.sdk.auditTrailType = .height640 // otherwise no auditTrail images
 
     // Create the customization object
@@ -258,11 +258,10 @@ class ZoomAuth:  RCTViewManager, ZoomVerificationDelegate {
     currentCustomization.showRetryScreen = (options["showRetryScreen"] as? Bool)!
     currentCustomization.enableLowLightMode = (options["enableLowLightMode"] as? Bool)!
 
-    // Sample UI Customization: vertically center the ZoOm frame within the device's display
-    if (options["centerFrame"] as? Bool)! {
-      centerZoomFrameCustomization(currentZoomCustomization: currentCustomization)
-    }
-
+    addFrameCustomizations(currentCustomization: currentCustomization, options: options)
+    addFeedbackCustomizations(currentCustomization: currentCustomization, options: options)
+    addOvalCustomizations(currentCustomization: currentCustomization, options: options)
+    
     // Apply the customization changes
     Zoom.sdk.setCustomization(currentCustomization)
     Zoom.sdk.initialize(
@@ -294,6 +293,46 @@ class ZoomAuth:  RCTViewManager, ZoomVerificationDelegate {
       }
     )
   }
+  
+  func addFrameCustomizations(currentCustomization: ZoomCustomization, options: Dictionary<String, Any>) {
+    // Sample UI Customization: vertically center the ZoOm frame within the device's display
+    if (options["centerFrame"] as? Bool)! {
+      centerZoomFrameCustomization(currentZoomCustomization: currentCustomization)
+    }
+    
+    if (options["backgroundColor"] != nil) {
+      currentCustomization.frameCustomization.backgroundColor = convertToUIColor(hex: options["backgroundColor"] as! String)
+    }
+    
+    if (options["borderColor"] != nil) {
+      currentCustomization.frameCustomization.borderColor = convertToUIColor(hex: options["borderColor"] as! String)
+    }
+  }
+  
+  func addFeedbackCustomizations(currentCustomization: ZoomCustomization, options: Dictionary<String, Any>) {
+    let feedbackCustomization: Dictionary<String, Any> = options["feedbackCustomization"] as! Dictionary<String, Any>
+    // Create gradient layer for a custom feedback bar background on iOS
+    if (!feedbackCustomization.isEmpty) {
+      let backgroundColors = feedbackCustomization["backgroundColor"] as! Array<String>
+      let zoomGradientLayer = createGradientLayer(_self: self, hexColor1: backgroundColors[0], hexColor2: backgroundColors[1])
+      currentCustomization.feedbackCustomization.backgroundColor = zoomGradientLayer
+      print("Feedback customizations applied.")
+    }
+  }
+  
+  func addOvalCustomizations(currentCustomization: ZoomCustomization, options: Dictionary<String, Any>) {
+    let ovalCustomization: Dictionary<String, Any> = options["ovalCustomization"] as! Dictionary<String, Any>
+    if (!ovalCustomization.isEmpty) {
+      let supportedColorOvalCustomizations = ["progressColor1", "progressColor2"]
+      for property in supportedColorOvalCustomizations {
+        if (ovalCustomization[property] != nil) {
+          let value = ovalCustomization[property]
+          currentCustomization.ovalCustomization.setValue(convertToUIColor(hex: value as! String), forKey: property)
+        }
+      }
+      print("Oval customizations applied.")
+    }
+  }
 
   func centerZoomFrameCustomization(currentZoomCustomization: ZoomCustomization) {
     let screenHeight: CGFloat = UIScreen.main.fixedCoordinateSpace.bounds.size.height
@@ -307,4 +346,34 @@ class ZoomAuth:  RCTViewManager, ZoomVerificationDelegate {
 
     currentZoomCustomization.frameCustomization.topMargin = Double(topMarginToCenterFrame)
   }
+}
+
+func createGradientLayer(_self: ZoomAuth, hexColor1: String, hexColor2: String) -> CAGradientLayer {
+  let gradientLayer = CAGradientLayer()
+  gradientLayer.frame = _self.view().bounds
+  gradientLayer.colors = [convertToUIColor(hex: hexColor1).cgColor, convertToUIColor(hex: hexColor2).cgColor]
+  _self.view().layer.addSublayer(gradientLayer)
+  return gradientLayer
+}
+
+func convertToUIColor(hex: String, alpha: Int = 1) -> UIColor {
+  if hex.hasPrefix("#") {
+    let start = hex.index(hex.startIndex, offsetBy: 1)
+    let hexColor = String(hex[start...])
+    
+    if hexColor.count == 6 {
+      let scanner = Scanner(string: hexColor)
+      var hexNumber: UInt64 = 0
+      
+      if scanner.scanHexInt64(&hexNumber) {
+        let red = CGFloat((hexNumber & 0xff0000) >> 16) / 255
+        let green = CGFloat((hexNumber & 0xff00) >> 8) / 255
+        let blue = CGFloat(hexNumber & 0xff) / 255
+        
+        return UIColor(red: red, green: green, blue: blue, alpha: CGFloat(alpha))
+      }
+    }
+  }
+  
+  return UIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
 }

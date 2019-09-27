@@ -1,9 +1,9 @@
 package com.reactlibrary;
 
 import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.support.annotation.NonNull;
@@ -17,15 +17,18 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facetec.zoom.sdk.ZoomAuditTrailType;
 import com.facetec.zoom.sdk.ZoomCustomization;
+import com.facetec.zoom.sdk.ZoomFeedbackCustomization;
 import com.facetec.zoom.sdk.ZoomFrameCustomization;
 import com.facetec.zoom.sdk.ZoomDevicePartialLivenessResult;
 import com.facetec.zoom.sdk.ZoomExternalImageSetVerificationResult;
 import com.facetec.zoom.sdk.ZoomFaceBiometricMetrics;
+import com.facetec.zoom.sdk.ZoomOvalCustomization;
 import com.facetec.zoom.sdk.ZoomSDK;
 import com.facetec.zoom.sdk.ZoomSDKStatus;
 import com.facetec.zoom.sdk.ZoomVerificationActivity;
@@ -104,7 +107,6 @@ public class RNReactNativeZoomSdkModule extends ReactContextBaseJavaModule {
     final String appToken = opts.getString("appToken");
     final String facemapEncryptionKey = opts.getString("facemapEncryptionKey");
 
-
     AsyncTask.execute(new Runnable() {
       @Override
       public void run() {
@@ -115,10 +117,9 @@ public class RNReactNativeZoomSdkModule extends ReactContextBaseJavaModule {
         currentCustomization.showRetryScreen= opts.getBoolean("showRetryScreen");
         currentCustomization.enableLowLightMode = opts.getBoolean("enableLowLightMode");
 
-        ZoomFrameCustomization frameCustomization = new ZoomFrameCustomization();
-        frameCustomization.topMargin = opts.getInt("topMargin");
-        frameCustomization.sizeRatio = (float)opts.getDouble("sizeRatio");
-        currentCustomization.setFrameCustomization(frameCustomization);
+        addFrameCustomizations(currentCustomization, opts);
+        addFeedbackCustomizations(currentCustomization, opts);
+        addOvalCustomizations(currentCustomization, opts);
 
         ZoomSDK.setCustomization(currentCustomization);
         ZoomSDK.initialize(getCurrentActivity(), appToken, new ZoomSDK.InitializeCallback() {
@@ -140,6 +141,60 @@ public class RNReactNativeZoomSdkModule extends ReactContextBaseJavaModule {
         ZoomSDK.setFacemapEncryptionKey(facemapEncryptionKey);
       }
     });
+  }
+
+  private void addFrameCustomizations(ZoomCustomization currentCustomization, ReadableMap opts) {
+    ZoomFrameCustomization frameCustomization = new ZoomFrameCustomization();
+    frameCustomization.topMargin = opts.getInt("topMargin");
+    frameCustomization.sizeRatio = (float)opts.getDouble("sizeRatio");
+
+    if (opts.hasKey("backgroundColor")) {
+      frameCustomization.backgroundColor = Color.parseColor(opts.getString("backgroundColor"));
+    }
+
+    if (opts.hasKey("borderColor")) {
+      frameCustomization.borderColor= Color.parseColor(opts.getString("borderColor"));
+    }
+
+    currentCustomization.setFrameCustomization(frameCustomization);
+  }
+
+  private void addFeedbackCustomizations(ZoomCustomization currentCustomization, ReadableMap opts) {
+    if (!opts.isNull("feedbackCustomization")) {
+      ZoomFeedbackCustomization feedbackCustomization = new ZoomFeedbackCustomization();
+      ReadableMap feedbackCustomizationOptions = opts.getMap("feedbackCustomization");
+
+      if (feedbackCustomizationOptions.hasKey("backgroundColor")) {
+        ReadableArray backgroundColors = feedbackCustomizationOptions.getArray("backgroundColor");
+
+        // This attribute contains array of 2 colors for gradient, but it seems like Java API
+        // doesn't allow to set gradient, so we take just the first.
+        String backgroundColor = backgroundColors.getString(0);
+
+        feedbackCustomization.backgroundColor = Color.parseColor(backgroundColor);
+      }
+
+      currentCustomization.setFeedbackCustomization(feedbackCustomization);
+      Log.d(TAG, "Feedback customizations applied.");
+    }
+  }
+
+  private void addOvalCustomizations(ZoomCustomization currentCustomization, ReadableMap opts) {
+    if (!opts.isNull("ovalCustomization")) {
+      ZoomOvalCustomization ovalCustomization = new ZoomOvalCustomization();
+      ReadableMap ovalCustomizationOptions = opts.getMap("ovalCustomization");
+
+      if (ovalCustomizationOptions.hasKey("progressColor1")) {
+        ovalCustomization.progressColor1 = Color.parseColor(ovalCustomizationOptions.getString("progressColor1"));
+      }
+
+      if (ovalCustomizationOptions.hasKey("progressColor2")) {
+        ovalCustomization.progressColor2 = Color.parseColor(ovalCustomizationOptions.getString("progressColor2"));
+      }
+
+      currentCustomization.setOvalCustomization(ovalCustomization);
+      Log.d(TAG, "Oval customizations applied.");
+    }
   }
 
   // private void enroll(JSONArray args, final CallbackContext callbackContext) throws JSONException {
