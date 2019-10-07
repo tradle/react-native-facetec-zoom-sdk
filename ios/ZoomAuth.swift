@@ -257,6 +257,11 @@ class ZoomAuth:  RCTViewManager, ZoomVerificationDelegate {
     currentCustomization.showUserLockedScreen = (options["showUserLockedScreen"] as? Bool)!
     currentCustomization.showRetryScreen = (options["showRetryScreen"] as? Bool)!
     currentCustomization.enableLowLightMode = (options["enableLowLightMode"] as? Bool)!
+    
+    let mainBackgroundColors = options["mainBackgroundColors"] != nil ? options["mainBackgroundColors"] as! Array<String> : []
+    if !mainBackgroundColors.isEmpty {
+      currentCustomization.mainBackgroundColors = [convertToUIColor(hex: mainBackgroundColors[0]), convertToUIColor(hex: mainBackgroundColors[1])]
+    }
 
     addFrameCustomizations(currentCustomization: currentCustomization, options: options)
     addFeedbackCustomizations(currentCustomization: currentCustomization, options: options)

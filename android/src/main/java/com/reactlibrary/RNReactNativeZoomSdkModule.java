@@ -117,6 +117,13 @@ public class RNReactNativeZoomSdkModule extends ReactContextBaseJavaModule {
         currentCustomization.showRetryScreen= opts.getBoolean("showRetryScreen");
         currentCustomization.enableLowLightMode = opts.getBoolean("enableLowLightMode");
 
+        if (opts.hasKey("mainBackgroundColors")) {
+          ReadableArray mainBackgroundColors = opts.getArray("mainBackgroundColors");
+          // This attribute contains array of 2 colors for gradient, but it seems like Java API
+          // doesn't allow to set gradient, so we take just the first.
+          currentCustomization.mainBackgroundColor = Color.parseColor(mainBackgroundColors.getString(0));
+        }
+
         addFrameCustomizations(currentCustomization, opts);
         addFeedbackCustomizations(currentCustomization, opts);
         addOvalCustomizations(currentCustomization, opts);
@@ -166,7 +173,6 @@ public class RNReactNativeZoomSdkModule extends ReactContextBaseJavaModule {
 
       if (feedbackCustomizationOptions.hasKey("backgroundColor")) {
         ReadableArray backgroundColors = feedbackCustomizationOptions.getArray("backgroundColor");
-
         // This attribute contains array of 2 colors for gradient, but it seems like Java API
         // doesn't allow to set gradient, so we take just the first.
         String backgroundColor = backgroundColors.getString(0);
