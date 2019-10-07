@@ -17,6 +17,8 @@ GJD4GIVvR+j12gXAaftj3ahfYxioBH7F7HQxzmWkwDyn3bqU54eaiB7f0ftsPpWM
 ceUaqkL2DZUvgN0efEJjnWy5y1/Gkq5GGWCROI9XG/SwXJ30BbVUehTbVcD70+ZF
 8QIDAQAB
 -----END PUBLIC KEY-----`,
+  feedbackCustomization: {},
+  ovalCustomization: {},
   // mainBackgroundColors: [UIColor]
   // mainForegroundColor: UIColor
   // buttonTextNormalColor: UIColor
