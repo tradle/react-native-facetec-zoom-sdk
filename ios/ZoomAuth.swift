@@ -7,13 +7,14 @@
 //
 
 import UIKit
-import ZoomAuthentication
+import FaceTecSDK
+import Network
 
 @objc(ZoomAuth)
-class ZoomAuth:  RCTViewManager, ProcessingDelegate {
+class ZoomAuth:  RCTViewManager, ProcessingDelegate, URLSessionTaskDelegate {
 
-  var verifyResolver: RCTPromiseResolveBlock? = nil
-  var verifyRejecter: RCTPromiseRejectBlock? = nil
+  var resolver: RCTPromiseResolveBlock? = nil
+  var rejecter: RCTPromiseRejectBlock? = nil
   var returnBase64: Bool = false
   var initialized = false
   var licenseKey: String!
@@ -25,23 +26,57 @@ class ZoomAuth:  RCTViewManager, ProcessingDelegate {
   }
 
   // React Method
-  @objc func verify(_ options: Dictionary<String, Any>, // options not used at the moment
+  @objc func verifyLiveness(_ options: Dictionary<String, Any>, // options not used at the moment
                       resolver resolve: @escaping RCTPromiseResolveBlock,
                       rejecter reject: @escaping RCTPromiseRejectBlock) -> Void {
-    self.verifyResolver = resolve
-    self.verifyRejecter = reject
-    self.returnBase64 = (options["returnBase64"] as? Bool)!
+    self.resolver = resolve
+    self.rejecter = reject
+    self.returnBase64 = options["returnBase64"] as? Bool ?? false;
     DispatchQueue.main.async {
       let root = UIApplication.shared.keyWindow!.rootViewController!
       var optionsWithKey = options
       optionsWithKey["licenseKey"] = self.licenseKey
-      let _ = LivenessCheckProcessor(delegate: self, fromVC: root, options: optionsWithKey)
+      self.getSessionToken() { sessionToken in
+        let _ = LivenessCheckProcessor(sessionToken: sessionToken, delegate: self, fromVC: root, options: optionsWithKey)
+      }
+    }
+  }
+
+  // React Method
+  @objc func enroll(_ options: Dictionary<String, Any>, // options not used at the moment
+                      resolver resolve: @escaping RCTPromiseResolveBlock,
+                      rejecter reject: @escaping RCTPromiseRejectBlock) -> Void {
+    self.resolver = resolve
+    self.rejecter = reject
+    DispatchQueue.main.async {
+      let root = UIApplication.shared.keyWindow!.rootViewController!
+      var optionsWithKey = options
+      optionsWithKey["licenseKey"] = self.licenseKey
+      self.getSessionToken() { sessionToken in
+        let _ = EnrollmentProcessor(sessionToken: sessionToken, delegate: self, fromVC: root, options: optionsWithKey)
+      }
+    }
+  }
+
+  // React Method
+  @objc func authenticate(_ options: Dictionary<String, Any>, // options not used at the moment
+                      resolver resolve: @escaping RCTPromiseResolveBlock,
+                      rejecter reject: @escaping RCTPromiseRejectBlock) -> Void {
+    self.resolver = resolve
+    self.rejecter = reject
+    DispatchQueue.main.async {
+      let root = UIApplication.shared.keyWindow!.rootViewController!
+      var optionsWithKey = options
+      optionsWithKey["licenseKey"] = self.licenseKey
+      self.getSessionToken() { sessionToken in
+        let _ = AuthenticateProcessor(sessionToken: sessionToken, delegate: self, fromVC: root, options: optionsWithKey)
+      }
     }
   }
 
   // Show the final result and transition back into the main interface.
-  func onProcessingComplete(isSuccess: Bool, zoomSessionResult: ZoomSessionResult?) {
-    let statusCode = zoomSessionResult?.status.rawValue ?? -1
+  func onProcessingComplete(isSuccess: Bool, facetecSessionResult: FaceTecSessionResult?) {
+    let statusCode = facetecSessionResult?.status.rawValue ?? -1
     var resultJson:[String:Any] = [
       "success": isSuccess,
       "status": statusCode
@@ -52,99 +87,41 @@ class ZoomAuth:  RCTViewManager, ProcessingDelegate {
       return
     }
 
-    resultJson["countOfZoomSessionsPerformed"] = zoomSessionResult?.countOfZoomSessionsPerformed ?? 1
-    resultJson["sessionId"] = zoomSessionResult?.sessionId ?? ""
+    resultJson["sessionId"] = facetecSessionResult?.sessionId ?? ""
 
-    if zoomSessionResult?.faceMetrics == nil {
-      self.sendResult(resultJson)
-      return
+    if self.returnBase64 && facetecSessionResult?.faceScan != nil {
+      resultJson["facemapBase64"] = facetecSessionResult!.faceScanBase64
     }
 
-    let face = zoomSessionResult?.faceMetrics
-    var faceMetrics: [String:Any] = [:]
-    if self.returnBase64 && face?.faceMapBase64 != nil {
-      faceMetrics["facemap"] = face!.faceMapBase64
-    }
-
-//    resultJson["faceMetrics"] = faceMetrics
-    if face?.auditTrail == nil {
-      self.sendResult(resultJson)
-      return
-    }
-
-    let auditTrailImages = face!.auditTrail!
-    var auditTrail:[String] = []
-    if self.returnBase64 {
-      if let auditTrailBase64 = face?.auditTrailCompressedBase64 {
-        faceMetrics["auditTrail"] = auditTrailBase64
-      }
-      
-      resultJson["faceMetrics"] = faceMetrics
-      self.sendResult(resultJson)
-      return
-    }
-
-    var togo = face?.auditTrailCompressedBase64?.count ?? 0
-    if let faceMap = face?.faceMap {
-      togo += 1
-      storeDataInImageStore(faceMap) { (tag) in
-        faceMetrics["facemap"] = tag
-        togo -= 1
-        if togo == 0 {
-          resultJson["faceMetrics"] = faceMetrics
-          self.sendResult(resultJson)
-        }
-      }
-    }
-
-    for image in auditTrailImages {
-      uiImageToImageStoreKey(image) { (tag) in
-        if (tag != nil) {
-          auditTrail.append(tag!)
-        }
-
-        togo -= 1
-        if togo == 0 {
-          faceMetrics["auditTrail"] = auditTrail
-          resultJson["faceMetrics"] = faceMetrics
-          self.sendResult(resultJson)
-        }
-      }
-    }
-
-//    EXAMPLE: retrieve facemap
-//    if let zoomFacemap = result.faceMetrics?.zoomFacemap {
-//      // handle ZoOm Facemap
-//    }
-
+    self.sendResult(resultJson)
   }
   
   // Show the final result and transition back into the main interface.
-  func onProcessingComplete(isSuccess: Bool, zoomSessionResult: ZoomSessionResult?, zoomIDScanResult: ZoomIDScanResult?) {
+  func onProcessingComplete(isSuccess: Bool, facetecSessionResult: FaceTecSessionResult?, facetecIDScanResult: FaceTecIDScanResult?) {
   }
   
   func sendResult(_ result: [String:Any]) -> Void {
-    if (self.verifyResolver == nil) {
+    if (self.resolver == nil) {
       return
     }
 
-    self.verifyResolver!(result)
+    self.resolver!(result)
     self.cleanUp()
   }
 
   // not used at the moment
   func sendError(_ code: String, message: String, error: Error) -> Void {
-    if (self.verifyRejecter == nil) {
+    if (self.rejecter == nil) {
       return
     }
 
-    self.verifyRejecter!(code, message, error)
+    self.rejecter!(code, message, error)
     self.cleanUp()
   }
 
   func cleanUp () -> Void {
-    self.verifyResolver = nil
-    self.verifyRejecter = nil
+    self.resolver = nil
+    self.rejecter = nil
   }
 
   func uiImageToBase64 (_ image: UIImage) -> String {
@@ -165,15 +142,10 @@ class ZoomAuth:  RCTViewManager, ProcessingDelegate {
   }
 
   // React Method
-  @objc func preload() -> Void {
-    Zoom.sdk.preload()
-  }
-
-  // React Method
   @objc func getVersion(_ resolve: RCTPromiseResolveBlock,
                         rejecter reject: RCTPromiseRejectBlock) -> Void {
 
-      let result: String = Zoom.sdk.version
+      let result: String = FaceTec.sdk.version
 
       if ( !result.isEmpty ) {
           resolve([
@@ -190,34 +162,22 @@ class ZoomAuth:  RCTViewManager, ProcessingDelegate {
   @objc func initialize(_ options: Dictionary<String, Any>,
                         resolver resolve: @escaping RCTPromiseResolveBlock,
                         rejecter reject: @escaping RCTPromiseRejectBlock) -> Void {
-    self.licenseKey = options["licenseKey"] as? String
+    self.licenseKey = options["deviceKeyIdentifier"] as! String
 
-    if (options["facemapEncryptionKey"] != nil) {
-      let publicKey = options["facemapEncryptionKey"] as! String
-      Zoom.sdk.setFaceMapEncryptionKey(publicKey: publicKey);
-    }
+    let faceMapEncryptionKey = options["facemapEncryptionKey"] as! String
 
-    Zoom.sdk.auditTrailType = .height640 // otherwise no auditTrail images
+    FaceTec.sdk.auditTrailType = .height640 // otherwise no auditTrail images
 
     // Create the customization object
-    let currentCustomization: ZoomCustomization = ZoomCustomization()
+    let currentCustomization: FaceTecCustomization = FaceTecCustomization()
     // disable the "Your App Logo" section
     currentCustomization.overlayCustomization.brandingImage = nil
-//    currentCustomization.overlayCustomization.blurEffectOpacity = 0
-//    currentCustomization.frameCustomization.blurEffectOpacity = 0
-//    currentCustomization.guidanceCustomization.showIntroScreenBrandingImage = false
-
-    // Sample UI Customization: vertically center the ZoOm frame within the device's display
-//    if (options["centerFrame"] as? Bool)! {
-//      centerZoomFrameCustomization(currentZoomCustomization: currentCustomization)
-//    } else if (options["topMargin"] != nil) {
-//      currentCustomization.frameCustomization.topMargin = options["topMargin"] as! Int32
-//    }
 
     // Apply the customization changes
-    Zoom.sdk.setCustomization(currentCustomization)
-    Zoom.sdk.initialize(
-      licenseKeyIdentifier: options["licenseKey"] as! String,
+    FaceTec.sdk.setCustomization(currentCustomization)
+    FaceTec.sdk.initializeInDevelopmentMode(
+      deviceKeyIdentifier: licenseKey,
+      faceScanEncryptionKey: faceMapEncryptionKey,
       completion: { (licenseKeyValidated: Bool) -> Void in
         //
         // We want to ensure that licenseKey is valid before enabling verification
@@ -231,31 +191,45 @@ class ZoomAuth:  RCTViewManager, ProcessingDelegate {
           ])
         }
         else {
-          let status = Zoom.sdk.getStatus().rawValue
+          let status = FaceTec.sdk.getStatus().rawValue
           resolve([
             "success": false,
             "status": status
           ])
-
-//          let errorMsg = "AppToken did not validate.  If Zoom ViewController's are launched, user will see an app token error state"
-//          print(errorMsg)
-//          let err: NSError = NSError(domain: errorMsg, code: 0, userInfo: nil)
-//          reject("initialize", errorMsg, err)
         }
       }
     )
   }
 
-//  func centerZoomFrameCustomization(currentZoomCustomization: ZoomCustomization) {
-//    let screenHeight: CGFloat = UIScreen.main.fixedCoordinateSpace.bounds.size.height
-//    var frameHeight: CGFloat = screenHeight * CGFloat(currentZoomCustomization.frameCustomization.sizeRatio)
-//    // Detect iPhone X and iPad displays
-//    if UIScreen.main.fixedCoordinateSpace.bounds.size.height >= 812 {
-//      let screenWidth = UIScreen.main.fixedCoordinateSpace.bounds.size.width
-//      frameHeight = screenWidth * (16.0/9.0) * CGFloat(currentZoomCustomization.frameCustomization.sizeRatio)
-//    }
-//    let topMarginToCenterFrame = (screenHeight - frameHeight)/2.0
-//
-//    currentZoomCustomization.frameCustomization.topMargin = Int32(topMarginToCenterFrame)
-//  }
+  func getSessionToken(sessionTokenCallback: @escaping (String) -> ()) {
+      let endpoint = ZoomGlobalState.ZoomServerBaseURL + "/session-token"
+      let request = NSMutableURLRequest(url: NSURL(string: endpoint)! as URL)
+      request.httpMethod = "GET"
+      // Required parameters to interact with the FaceTec Managed Testing API.
+      request.addValue(self.licenseKey, forHTTPHeaderField: "X-Device-Key")
+      request.addValue(FaceTec.sdk.createFaceTecAPIUserAgentString(""), forHTTPHeaderField: "User-Agent")
+      
+      let session = URLSession(configuration: URLSessionConfiguration.default, delegate: self, delegateQueue: OperationQueue.main)
+      let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+          // Ensure the data object is not nil otherwise callback with empty dictionary.
+          guard let data = data else {
+              print("Exception raised while attempting HTTPS call.")
+//              self.handleErrorGettingServerSessionToken()
+              return
+          }
+          if let responseJSONObj = try? JSONSerialization.jsonObject(with: data, options: JSONSerialization.ReadingOptions.allowFragments) as! [String: AnyObject] {
+              if((responseJSONObj["sessionToken"] as? String) != nil)
+              {
+//                  self.hideSessionTokenConnectionText()
+                  sessionTokenCallback(responseJSONObj["sessionToken"] as! String)
+                  return
+              }
+              else {
+                  print("Exception raised while attempting HTTPS call.")
+//                  self.handleErrorGettingServerSessionToken()
+              }
+          }
+      })
+      task.resume()
+  }
 }

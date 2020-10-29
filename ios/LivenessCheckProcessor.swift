@@ -2,15 +2,15 @@
 
 import UIKit
 import Foundation
-import ZoomAuthentication
+import FaceTecSDK
 
-class LivenessCheckProcessor: NSObject, URLSessionDelegate, ZoomFaceMapProcessorDelegate, ZoomSessionDelegate {
+class LivenessCheckProcessor: NSObject, URLSessionDelegate, FaceTecFaceScanProcessorDelegate {
     var licenseKey: String!
     var delegate: ProcessingDelegate
-    var latestZoomSessionResult: ZoomSessionResult?
+    var latestZoomSessionResult: FaceTecSessionResult?
     var isSuccess: Bool
 
-    init(delegate: ProcessingDelegate, fromVC: UIViewController, options: Dictionary<String, Any>) {
+    init(sessionToken: String, delegate: ProcessingDelegate, fromVC: UIViewController, options: Dictionary<String, Any>) {
         self.delegate = delegate
         self.isSuccess = false
 
@@ -19,8 +19,8 @@ class LivenessCheckProcessor: NSObject, URLSessionDelegate, ZoomFaceMapProcessor
         self.licenseKey = options["licenseKey"] as? String
 
         // Launch the ZoOm Session.
-        let sessionVC = Zoom.sdk.createSessionVC(delegate: self, faceMapProcessorDelegate: self)
-        if (options["useOverlay"] as? Bool)! {
+        let sessionVC = FaceTec.sdk.createSessionVC(faceScanProcessorDelegate: self, sessionToken: sessionToken)
+        if (options["useOverlay"] as? Bool ?? false) {
             sessionVC.modalPresentationStyle = .overCurrentContext
         }
         
@@ -28,11 +28,11 @@ class LivenessCheckProcessor: NSObject, URLSessionDelegate, ZoomFaceMapProcessor
     }
     
     // Required function that handles calling ZoOm Server to get result and decides how to continue.
-    func processZoomSessionResultWhileZoomWaits(zoomSessionResult: ZoomSessionResult, zoomFaceMapResultCallback: ZoomFaceMapResultCallback) {
-        self.latestZoomSessionResult = zoomSessionResult
+    func processSessionWhileFaceTecSDKWaits(sessionResult: FaceTecSessionResult, faceScanResultCallback: FaceTecFaceScanResultCallback) {
+        self.latestZoomSessionResult = sessionResult
         // cancellation, timeout, etc.
-        if zoomSessionResult.status != .sessionCompletedSuccessfully || zoomSessionResult.faceMetrics?.faceMap == nil {
-            zoomFaceMapResultCallback.onFaceMapResultCancel();
+        if sessionResult.status != .sessionCompletedSuccessfully {
+            faceScanResultCallback.onFaceScanResultCancel();
             return
         }
         
@@ -40,19 +40,19 @@ class LivenessCheckProcessor: NSObject, URLSessionDelegate, ZoomFaceMapProcessor
         NetworkingHelpers.getLivenessCheckResponseFromZoomServer(
             urlSessionDelegate: self,
             licenseKey: self.licenseKey,
-            zoomSessionResult: zoomSessionResult,
+            zoomSessionResult: sessionResult,
             resultCallback: { nextStep in
                 if nextStep == .Succeed {
                     // Dynamically set the success message.
 //                    ZoomCustomization.setOverrideResultScreenSuccessMessage("Liveness\nConfirmed")
-                    zoomFaceMapResultCallback.onFaceMapResultSucceed()
+                    faceScanResultCallback.onFaceScanResultSucceed()
                     self.isSuccess = true
                 }
                 else if nextStep == .Retry {
-                    zoomFaceMapResultCallback.onFaceMapResultRetry()
+                    faceScanResultCallback.onFaceScanResultRetry()
                 }
                 else {
-                    zoomFaceMapResultCallback.onFaceMapResultCancel()
+                    faceScanResultCallback.onFaceScanResultCancel()
                 }
             }
         )
@@ -64,7 +64,7 @@ class LivenessCheckProcessor: NSObject, URLSessionDelegate, ZoomFaceMapProcessor
     }
     
     // The final callback ZoOm SDK calls when done with everything.
-    func onZoomSessionComplete() {
-        delegate.onProcessingComplete(isSuccess: isSuccess, zoomSessionResult: latestZoomSessionResult)
+    func onFaceTecSDKCompletelyDone() {
+        delegate.onProcessingComplete(isSuccess: isSuccess, facetecSessionResult: latestZoomSessionResult)
     }
 }

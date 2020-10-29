@@ -14,8 +14,6 @@
 
 @interface RCT_EXTERN_REMAP_MODULE(RNReactNativeZoomSdk, ZoomAuth, RCTViewManager)
 
-RCT_EXTERN_METHOD(preload)
-
 RCT_EXTERN_METHOD(getVersion:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
@@ -23,7 +21,15 @@ RCT_EXTERN_METHOD(initialize:(NSDictionary*) options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
-RCT_EXTERN_METHOD(verify:(NSDictionary*) options
+RCT_EXTERN_METHOD(verifyLiveness:(NSDictionary*) options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(enroll:(NSDictionary*) options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(authenticate:(NSDictionary*) options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 

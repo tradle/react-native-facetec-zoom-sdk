@@ -2,7 +2,7 @@
 
 import UIKit
 import Foundation
-import ZoomAuthentication
+import FaceTecSDK
 
 // Possible directives after parsing the result from ZoOm Server
 enum UXNextStep {
@@ -13,14 +13,14 @@ enum UXNextStep {
 
 class NetworkingHelpers {
     // Set up common parameters needed to communicate to the API.
-    class func getCommonParameters(zoomSessionResult: ZoomSessionResult) -> [String : Any] {
-        let zoomFaceMapBase64 = zoomSessionResult.faceMetrics?.faceMapBase64;
+    class func getCommonParameters(zoomSessionResult: FaceTecSessionResult) -> [String : Any] {
+        let zoomFaceMapBase64 = zoomSessionResult.faceScanBase64;
         
         var parameters: [String : Any] = [:]
         parameters["faceMap"] = zoomFaceMapBase64
         parameters["sessionId"] = zoomSessionResult.sessionId
         
-        if let auditTrail = zoomSessionResult.faceMetrics?.auditTrailCompressedBase64 {
+        if let auditTrail = zoomSessionResult.auditTrailCompressedBase64 {
             parameters["auditTrailImage"] = auditTrail[0]
         }
         
@@ -76,7 +76,7 @@ class NetworkingHelpers {
         // Required parameters to interact with the FaceTec Managed Testing API.
 //        request.addValue(ZoomGlobalState.DeviceLicenseKeyIdentifier, forHTTPHeaderField: "X-Device-License-Key")
         request.addValue(licenseKey, forHTTPHeaderField: "X-Device-License-Key")
-        request.addValue(Zoom.sdk.createZoomAPIUserAgentString(sessionId), forHTTPHeaderField: "User-Agent")
+        request.addValue(FaceTec.sdk.createFaceTecAPIUserAgentString(sessionId), forHTTPHeaderField: "User-Agent")
         
         let session = URLSession(configuration: URLSessionConfiguration.default, delegate: urlSessionDelegate, delegateQueue: OperationQueue.main)
         let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
@@ -100,13 +100,17 @@ class NetworkingHelpers {
     public class func getLivenessCheckResponseFromZoomServer(
         urlSessionDelegate: URLSessionDelegate,
         licenseKey: String,
-        zoomSessionResult: ZoomSessionResult,
+        zoomSessionResult: FaceTecSessionResult,
         resultCallback: @escaping (UXNextStep) -> ()
     )
     {
-        let parameters = getCommonParameters(zoomSessionResult: zoomSessionResult)
+        var parameters: [String : Any] = [:]
+        parameters["faceScan"] = zoomSessionResult.faceScanBase64
+        parameters["auditTrailImage"] = zoomSessionResult.auditTrailCompressedBase64![0]
+        parameters["lowQualityAuditTrailImage"] = zoomSessionResult.lowQualityAuditTrailCompressedBase64![0]
+
         callToZoomServerForResult(
-            endpoint: ZoomGlobalState.ZoomServerBaseURL + "/liveness",
+            endpoint: ZoomGlobalState.ZoomServerBaseURL + "/liveness-3d",
             parameters: parameters,
             sessionId: zoomSessionResult.sessionId,
             urlSessionDelegate: urlSessionDelegate,
@@ -189,10 +193,12 @@ class NetworkingHelpers {
 class ServerResultHelpers {
     // if Liveness was Determined, succeed.  Otherwise fail.  Unexpected responses cancel.
     public class func getLivenessNextStep(responseJSONObj: [String: AnyObject]) -> UXNextStep {
-        if (responseJSONObj["data"] as? [String : Any])?["livenessStatus"] as? Int == 0 {
+        let didSucceed = responseJSONObj["success"] as? Bool
+
+        if didSucceed == true {
             return .Succeed
         }
-        else if (responseJSONObj["data"] as? [String : Any])?["livenessStatus"] as? Int == 1 {
+        else if (didSucceed == false) {
             return .Retry
         }
         else {

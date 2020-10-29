@@ -11,7 +11,7 @@ export const status = {
 
 const wrapNative = native => {
   let initialized
-  let verifying
+  let processing
 
   const initialize = async opts => {
     initialized = false
@@ -28,33 +28,48 @@ const wrapNative = native => {
   }
 
   const getVersion = () => native.getVersion()
-  const verify = async (opts = {}) => {
+  const exec = async (operation, opts = {}) => {
     if (!initialized) {
       throw new NotInitializedError('initialize me first!')
     }
 
-    if (verifying) {
+    if (processing) {
       throw new VerificationPendingError('only one verification can be done at a time')
     }
 
     let result
     try {
-      result = await native.verify({
-        ...defaults.verify,
+      result = await native[operation]({
+        ...defaults[operation],
         ...opts,
       })
 
       result.status = statusToString(result.status)
       return result
     } finally {
-      verifying = false
+      processing = false
     }
   }
 
+  const enroll = (opts) => {
+    if (typeof opts.id !== 'string' || !opts.id) throw new Error('expected string "id"')
+
+    return exec('enroll', opts)
+  }
+
+  const authenticate = (opts) => {
+    if (typeof opts.id !== 'string' || !opts.id) throw new Error('expected string "id"')
+
+    return exec('authenticate', opts)
+  }
+
   return {
-    preload: native.preload,
     initialize,
-    verify,
+    verifyLiveness: exec.bind(null, 'verifyLiveness'),
+    // backwards compat
+    verify: exec.bind(null, 'verifyLiveness'),
+    enroll,
+    authenticate,
     getVersion,
   }
 }
